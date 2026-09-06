@@ -1,4 +1,5 @@
 from flask import Flask, jsonify
+from flask_cors import CORS
 
 from src.recommender import (
     load_data,
@@ -8,7 +9,7 @@ from src.recommender import (
 
 
 app = Flask(__name__)
-
+CORS(app)
 
 # --------------------------------------------------
 # Load data and build recommendation model
