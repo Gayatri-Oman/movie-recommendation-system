@@ -8,6 +8,7 @@ def load_data():
     """
     Load the cleaned movie dataset.
     """
+
     base_dir = Path(__file__).resolve().parent.parent
     data_path = base_dir / "data" / "movies_cleaned.csv"
 
@@ -18,7 +19,8 @@ def load_data():
 
 def build_model(df):
     """
-    Build the TF-IDF model and cosine similarity matrix.
+    Build the TF-IDF model, similarity matrix,
+    and movie lookup.
     """
 
     tfidf = TfidfVectorizer(
@@ -84,7 +86,11 @@ def recommend(
         recommendations.append({
             "movie_key": movie["movie_key"],
             "movie_name": movie["movie_name"],
-            "year": int(movie["year"]) if pd.notna(movie["year"]) else None,
+            "year": (
+                int(movie["year"])
+                if pd.notna(movie["year"])
+                else None
+            ),
             "genre": movie["genre"],
             "director": movie["director"],
             "cast": movie["cast"],
@@ -98,31 +104,32 @@ def recommend(
 
 
 # --------------------------------------------------
-# Main execution
+# Test the recommendation engine directly
 # --------------------------------------------------
 
-df = load_data()
+if __name__ == "__main__":
 
-tfidf, similarity, movie_indices = build_model(df)
+    df = load_data()
 
-print(f"Loaded {len(df)} movies.")
-print("TF-IDF model and similarity matrix created.")
-print("Movie lookup created.")
+    tfidf, similarity, movie_indices = build_model(df)
 
+    print(f"Loaded {len(df)} movies.")
+    print("TF-IDF model and similarity matrix created.")
+    print("Movie lookup created.")
 
-# Test the recommendation system
-results = recommend(
-    "Dangal (2016)",
-    df,
-    similarity,
-    movie_indices,
-    5
-)
-
-print("Recommendations:")
-for i, movie in enumerate(results, start=1):
-    print(
-        f"{i}. {movie['movie_name']} "
-        f"({movie['year']}) - "
-        f"Similarity: {movie['similarity']}"
+    results = recommend(
+        "Dangal (2016)",
+        df,
+        similarity,
+        movie_indices,
+        5
     )
+
+    print("\nRecommendations:")
+
+    for i, movie in enumerate(results, start=1):
+        print(
+            f"{i}. {movie['movie_name']} "
+            f"({movie['year']}) - "
+            f"Similarity: {movie['similarity']}"
+        )
