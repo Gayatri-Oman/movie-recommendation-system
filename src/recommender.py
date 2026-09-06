@@ -1,39 +1,57 @@
 import pandas as pd
+from pathlib import Path
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-df = pd.read_csv("../data/movies_cleaned.csv")
 
-print(f"Loaded {len(df)} movies.")
+def load_data():
+    """
+    Load the cleaned movie dataset.
+    """
+    base_dir = Path(__file__).resolve().parent.parent
+    data_path = base_dir / "data" / "movies_cleaned.csv"
 
-tfidf = TfidfVectorizer(
-    stop_words='english'
-)
+    df = pd.read_csv(data_path)
 
-tfidf_matrix = tfidf.fit_transform(
-    df['weighted_tags']
-)
+    return df
 
-print("TF-IDF matrix shape:", tfidf_matrix.shape)
 
-TfidfVectorizer(stop_words='english')
+def build_model(df):
+    """
+    Build the TF-IDF model and cosine similarity matrix.
+    """
 
-tfidf.fit_transform(df['weighted_tags'])
+    tfidf = TfidfVectorizer(
+        stop_words='english'
+    )
 
-tfidf_matrix.shape
+    tfidf_matrix = tfidf.fit_transform(
+        df['weighted_tags']
+    )
 
-similarity = cosine_similarity(tfidf_matrix)
+    similarity = cosine_similarity(
+        tfidf_matrix
+    )
 
-print("Similarity matrix shape:", similarity.shape)
+    movie_indices = pd.Series(
+        df.index,
+        index=df['movie_key']
+    )
 
-movie_indices = pd.Series(
-    df.index,
-    index=df['movie_key']
-)
+    return tfidf, similarity, movie_indices
 
-print("Movie lookup created.")
 
-def recommend(movie_key, num_recommendations=10):
+def recommend(
+    movie_key,
+    df,
+    similarity,
+    movie_indices,
+    num_recommendations=10
+):
+    """
+    Recommend movies similar to the selected movie.
+    """
+
     if movie_key not in movie_indices:
         return f"Movie '{movie_key}' not found."
 
@@ -52,21 +70,59 @@ def recommend(movie_key, num_recommendations=10):
     recommendations = []
 
     for index, score in similarity_scores:
+
+        # Skip the selected movie itself
         if index == movie_index:
             continue
 
+        # Skip placeholder movies
         if df.iloc[index]['is_placeholder']:
             continue
 
-        recommendations.append(
-            (
-                df.iloc[index]['movie_key'],
-                float(round(score, 3))
-            )
-        )
+        movie = df.iloc[index]
+
+        recommendations.append({
+            "movie_key": movie["movie_key"],
+            "movie_name": movie["movie_name"],
+            "year": int(movie["year"]) if pd.notna(movie["year"]) else None,
+            "genre": movie["genre"],
+            "director": movie["director"],
+            "cast": movie["cast"],
+            "similarity": float(round(score, 3))
+        })
 
         if len(recommendations) == num_recommendations:
             break
 
     return recommendations
 
+
+# --------------------------------------------------
+# Main execution
+# --------------------------------------------------
+
+df = load_data()
+
+tfidf, similarity, movie_indices = build_model(df)
+
+print(f"Loaded {len(df)} movies.")
+print("TF-IDF model and similarity matrix created.")
+print("Movie lookup created.")
+
+
+# Test the recommendation system
+results = recommend(
+    "Dangal (2016)",
+    df,
+    similarity,
+    movie_indices,
+    5
+)
+
+print("Recommendations:")
+for i, movie in enumerate(results, start=1):
+    print(
+        f"{i}. {movie['movie_name']} "
+        f"({movie['year']}) - "
+        f"Similarity: {movie['similarity']}"
+    )
