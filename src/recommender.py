@@ -43,25 +43,31 @@ def build_model(df):
     return tfidf, similarity, movie_indices
 
 
-def recommend(
-    movie_key,
-    df,
-    similarity,
-    movie_indices,
-    num_recommendations=10
-):
-    """
-    Recommend movies similar to the selected movie.
-    """
-
+def recommend(movie_key, df, similarity, movie_indices, num_recommendations=10):
     if movie_key not in movie_indices:
         return f"Movie '{movie_key}' not found."
 
     movie_index = movie_indices[movie_key]
 
-    similarity_scores = list(
-        enumerate(similarity[movie_index])
-    )
+    # Get the movie that the user searched for
+    selected_movie = df.iloc[movie_index]
+
+    recommendations = []
+
+    # Add the searched movie as the first card
+    recommendations.append({
+        "movie_key": selected_movie["movie_key"],
+        "movie_name": selected_movie["movie_name"],
+        "year": int(selected_movie["year"]) if pd.notna(selected_movie["year"]) else None,
+        "genre": selected_movie["genre"],
+        "director": selected_movie["director"],
+        "cast": selected_movie["cast"],
+        "similarity": 1.0,
+        "is_selected": True
+    })
+
+    # Calculate similarity scores
+    similarity_scores = list(enumerate(similarity[movie_index]))
 
     similarity_scores = sorted(
         similarity_scores,
@@ -69,16 +75,15 @@ def recommend(
         reverse=True
     )
 
-    recommendations = []
-
+    # Add similar movies
     for index, score in similarity_scores:
 
-        # Skip the selected movie itself
+        # Skip the searched movie
         if index == movie_index:
             continue
 
-        # Skip placeholder movies
-        if df.iloc[index]['is_placeholder']:
+        # Skip placeholder movies such as "Untitled..."
+        if df.iloc[index]["is_placeholder"]:
             continue
 
         movie = df.iloc[index]
@@ -86,22 +91,94 @@ def recommend(
         recommendations.append({
             "movie_key": movie["movie_key"],
             "movie_name": movie["movie_name"],
-            "year": (
-                int(movie["year"])
-                if pd.notna(movie["year"])
-                else None
-            ),
+            "year": int(movie["year"]) if pd.notna(movie["year"]) else None,
             "genre": movie["genre"],
             "director": movie["director"],
             "cast": movie["cast"],
-            "similarity": float(round(score, 3))
+            "similarity": float(round(score, 3)),
+            "is_selected": False
         })
 
+        # We want exactly 10 movies
         if len(recommendations) == num_recommendations:
             break
 
     return recommendations
 
+def search_movies(query, df, limit=8):
+    """
+    Search movies by title.
+
+    Ranking priority:
+    1. Exact title match
+    2. Title starts with query
+    3. Title contains query
+
+    Newer movies are preferred when the match type is the same.
+    """
+
+    query = query.strip().lower()
+
+    if not query:
+        return []
+
+    movie_names = (
+        df["movie_name"]
+        .fillna("")
+        .str.strip()
+        .str.lower()
+    )
+
+    exact_match = movie_names == query
+
+    starts_with = (
+        movie_names.str.startswith(query)
+        & ~exact_match
+    )
+
+    contains = (
+        movie_names.str.contains(query, regex=False)
+        & ~exact_match
+        & ~starts_with
+    )
+
+    results = df[
+        exact_match | starts_with | contains
+    ].copy()
+
+    if results.empty:
+        return []
+
+    # Assign search priority
+    results["search_priority"] = 3
+
+    results.loc[contains, "search_priority"] = 2
+    results.loc[starts_with, "search_priority"] = 1
+    results.loc[exact_match, "search_priority"] = 0
+
+    # Newer movies first within the same search priority
+    results = results.sort_values(
+        by=["search_priority", "year"],
+        ascending=[True, False],
+        na_position="last"
+    )
+
+    search_results = []
+
+    for _, movie in results.head(limit).iterrows():
+
+        search_results.append({
+            "movie_key": movie["movie_key"],
+            "movie_name": movie["movie_name"],
+            "year": (
+                int(movie["year"])
+                if pd.notna(movie["year"])
+                else None
+            ),
+            "genre": movie["genre"]
+        })
+
+    return search_results
 
 # --------------------------------------------------
 # Test the recommendation engine directly
